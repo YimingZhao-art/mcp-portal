@@ -3,7 +3,6 @@ import {
   CompatibilityCallToolResult,
   CompatibilityCallToolResultSchema,
   CreateMessageResult,
-  EmptyResultSchema,
   GetPromptResultSchema,
   ListPromptsResultSchema,
   ListResourcesResultSchema,
@@ -36,23 +35,12 @@ import {
 } from "./lib/hooks/useDraggablePane";
 import { StdErrNotification } from "./lib/notificationTypes";
 
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Button } from "@/components/ui/button";
-import {
-  Bell,
-  Files,
-  FolderTree,
-  Hammer,
-  Hash,
-  Key,
-  MessageSquare,
-} from "lucide-react";
-
+import { TabsContent } from "@/components/ui/tabs";
 import { z } from "zod";
 import "./App.css";
 import AuthDebugger from "./components/AuthDebugger";
 import ConsoleTab from "./components/ConsoleTab";
-import HistoryAndNotifications from "./components/History";
+import NgrokPanel from "./components/History";
 import PingTab from "./components/PingTab";
 import PromptsTab, { Prompt } from "./components/PromptsTab";
 import ResourcesTab from "./components/ResourcesTab";
@@ -60,6 +48,7 @@ import RootsTab from "./components/RootsTab";
 import SamplingTab, { PendingRequest } from "./components/SamplingTab";
 import Sidebar from "./components/Sidebar";
 import ToolsTab from "./components/ToolsTab";
+import StatusPanel from "./components/StatusPanel";
 import { InspectorConfig } from "./lib/configurationTypes";
 import {
   getMCPProxyAddress,
@@ -158,6 +147,11 @@ const App = () => {
   const [nextToolCursor, setNextToolCursor] = useState<string | undefined>();
   const progressTokenRef = useRef(0);
 
+  // 隧道相关状态
+  const [localUrl, setLocalUrl] = useState<string>("");
+  const [publicUrl, setPublicUrl] = useState<string>("");
+  const [tunnelStatus, setTunnelStatus] = useState<"idle" | "starting" | "active" | "error">("idle");
+
   const { height: historyPaneHeight, handleDragStart } = useDraggablePane(300);
   const {
     width: sidebarWidth,
@@ -202,6 +196,21 @@ const App = () => {
     },
     getRoots: () => rootsRef.current,
   });
+
+  // 根据传输类型和连接状态更新本地 URL
+  useEffect(() => {
+    if (connectionStatus === "connected") {
+      if (transportType === "stdio") {
+        // stdio 模式使用 supergateway 的地址
+        setLocalUrl("http://localhost:9001/sse");
+      } else if (transportType === "sse" || transportType === "streamable-http") {
+        // sse/http 模式直接显示原始 URL
+        setLocalUrl(sseUrl);
+      }
+    } else {
+      setLocalUrl("");
+    }
+  }, [connectionStatus, transportType, sseUrl]);
 
   useEffect(() => {
     localStorage.setItem("lastCommand", command);
@@ -586,6 +595,84 @@ const App = () => {
     setStdErrNotifications([]);
   };
 
+  // 隧道控制函数
+  const handleStartTunnel = async () => {
+    try {
+      setTunnelStatus("starting");
+      
+      // 根据传输类型确定要暴露的端口
+      let targetPort = 6277; // 默认 inspector proxy 端口
+      if (transportType === "stdio") {
+        targetPort = 9001; // supergateway 端口
+      }
+      
+      console.log(`启动隧道，暴露端口 ${targetPort}...`);
+      
+      // 调用后端 API 启动隧道
+      const { token: proxyAuthToken, header: proxyAuthTokenHeader } = getMCPProxyAuthToken(config);
+      const headers: HeadersInit = {};
+      if (proxyAuthToken) {
+        headers[proxyAuthTokenHeader] = `Bearer ${proxyAuthToken}`;
+      }
+      
+      const response = await fetch(`${getMCPProxyAddress(config)}/tunnel/start`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...headers,
+        },
+        body: JSON.stringify({ port: targetPort }),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`启动隧道失败: ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      setPublicUrl(result.publicUrl);
+      setTunnelStatus("active");
+      console.log(`隧道启动成功: ${result.publicUrl}`);
+      
+    } catch (error) {
+      console.error("启动隧道失败:", error);
+      setTunnelStatus("error");
+    }
+  };
+
+  const handleStopTunnel = async () => {
+    try {
+      setTunnelStatus("idle");
+      
+      console.log("停止隧道...");
+      
+      // 调用后端 API 停止隧道
+      const { token: proxyAuthToken, header: proxyAuthTokenHeader } = getMCPProxyAuthToken(config);
+      const headers: HeadersInit = {};
+      if (proxyAuthToken) {
+        headers[proxyAuthTokenHeader] = `Bearer ${proxyAuthToken}`;
+      }
+      
+      const response = await fetch(`${getMCPProxyAddress(config)}/tunnel/stop`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...headers,
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error(`停止隧道失败: ${response.statusText}`);
+      }
+      
+      setPublicUrl("");
+      console.log("隧道停止成功");
+      
+    } catch (error) {
+      console.error("停止隧道失败:", error);
+      setTunnelStatus("error");
+    }
+  };
+
   // Helper component for rendering the AuthDebugger
   const AuthDebuggerWrapper = () => (
     <TabsContent value="auth">
@@ -677,246 +764,18 @@ const App = () => {
       </div>
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="flex-1 overflow-auto">
-          {mcpClient ? (
-            <Tabs
-              defaultValue={
-                Object.keys(serverCapabilities ?? {}).includes(
-                  window.location.hash.slice(1),
-                )
-                  ? window.location.hash.slice(1)
-                  : serverCapabilities?.resources
-                    ? "resources"
-                    : serverCapabilities?.prompts
-                      ? "prompts"
-                      : serverCapabilities?.tools
-                        ? "tools"
-                        : "ping"
-              }
-              className="w-full p-4"
-              onValueChange={(value) => (window.location.hash = value)}
-            >
-              <TabsList className="mb-4 py-0">
-                <TabsTrigger
-                  value="resources"
-                  disabled={!serverCapabilities?.resources}
-                >
-                  <Files className="w-4 h-4 mr-2" />
-                  Resources
-                </TabsTrigger>
-                <TabsTrigger
-                  value="prompts"
-                  disabled={!serverCapabilities?.prompts}
-                >
-                  <MessageSquare className="w-4 h-4 mr-2" />
-                  Prompts
-                </TabsTrigger>
-                <TabsTrigger
-                  value="tools"
-                  disabled={!serverCapabilities?.tools}
-                >
-                  <Hammer className="w-4 h-4 mr-2" />
-                  Tools
-                </TabsTrigger>
-                <TabsTrigger value="ping">
-                  <Bell className="w-4 h-4 mr-2" />
-                  Ping
-                </TabsTrigger>
-                <TabsTrigger value="sampling" className="relative">
-                  <Hash className="w-4 h-4 mr-2" />
-                  Sampling
-                  {pendingSampleRequests.length > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">
-                      {pendingSampleRequests.length}
-                    </span>
-                  )}
-                </TabsTrigger>
-                <TabsTrigger value="roots">
-                  <FolderTree className="w-4 h-4 mr-2" />
-                  Roots
-                </TabsTrigger>
-                <TabsTrigger value="auth">
-                  <Key className="w-4 h-4 mr-2" />
-                  Auth
-                </TabsTrigger>
-              </TabsList>
-
-              <div className="w-full">
-                {!serverCapabilities?.resources &&
-                !serverCapabilities?.prompts &&
-                !serverCapabilities?.tools ? (
-                  <>
-                    <div className="flex items-center justify-center p-4">
-                      <p className="text-lg text-gray-500 dark:text-gray-400">
-                        The connected server does not support any MCP
-                        capabilities
-                      </p>
-                    </div>
-                    <PingTab
-                      onPingClick={() => {
-                        void sendMCPRequest(
-                          {
-                            method: "ping" as const,
-                          },
-                          EmptyResultSchema,
-                        );
-                      }}
-                    />
-                  </>
-                ) : (
-                  <>
-                    <ResourcesTab
-                      resources={resources}
-                      resourceTemplates={resourceTemplates}
-                      listResources={() => {
-                        clearError("resources");
-                        listResources();
-                      }}
-                      clearResources={() => {
-                        setResources([]);
-                        setNextResourceCursor(undefined);
-                      }}
-                      listResourceTemplates={() => {
-                        clearError("resources");
-                        listResourceTemplates();
-                      }}
-                      clearResourceTemplates={() => {
-                        setResourceTemplates([]);
-                        setNextResourceTemplateCursor(undefined);
-                      }}
-                      readResource={(uri) => {
-                        clearError("resources");
-                        readResource(uri);
-                      }}
-                      selectedResource={selectedResource}
-                      setSelectedResource={(resource) => {
-                        clearError("resources");
-                        setSelectedResource(resource);
-                      }}
-                      resourceSubscriptionsSupported={
-                        serverCapabilities?.resources?.subscribe || false
-                      }
-                      resourceSubscriptions={resourceSubscriptions}
-                      subscribeToResource={(uri) => {
-                        clearError("resources");
-                        subscribeToResource(uri);
-                      }}
-                      unsubscribeFromResource={(uri) => {
-                        clearError("resources");
-                        unsubscribeFromResource(uri);
-                      }}
-                      handleCompletion={handleCompletion}
-                      completionsSupported={completionsSupported}
-                      resourceContent={resourceContent}
-                      nextCursor={nextResourceCursor}
-                      nextTemplateCursor={nextResourceTemplateCursor}
-                      error={errors.resources}
-                    />
-                    <PromptsTab
-                      prompts={prompts}
-                      listPrompts={() => {
-                        clearError("prompts");
-                        listPrompts();
-                      }}
-                      clearPrompts={() => {
-                        setPrompts([]);
-                        setNextPromptCursor(undefined);
-                      }}
-                      getPrompt={(name, args) => {
-                        clearError("prompts");
-                        getPrompt(name, args);
-                      }}
-                      selectedPrompt={selectedPrompt}
-                      setSelectedPrompt={(prompt) => {
-                        clearError("prompts");
-                        setSelectedPrompt(prompt);
-                        setPromptContent("");
-                      }}
-                      handleCompletion={handleCompletion}
-                      completionsSupported={completionsSupported}
-                      promptContent={promptContent}
-                      nextCursor={nextPromptCursor}
-                      error={errors.prompts}
-                    />
-                    <ToolsTab
-                      tools={tools}
-                      listTools={() => {
-                        clearError("tools");
-                        listTools();
-                      }}
-                      clearTools={() => {
-                        setTools([]);
-                        setNextToolCursor(undefined);
-                        // Clear cached output schemas
-                        cacheToolOutputSchemas([]);
-                      }}
-                      callTool={async (name, params) => {
-                        clearError("tools");
-                        setToolResult(null);
-                        await callTool(name, params);
-                      }}
-                      selectedTool={selectedTool}
-                      setSelectedTool={(tool) => {
-                        clearError("tools");
-                        setSelectedTool(tool);
-                        setToolResult(null);
-                      }}
-                      toolResult={toolResult}
-                      nextCursor={nextToolCursor}
-                      error={errors.tools}
-                    />
-                    <ConsoleTab />
-                    <PingTab
-                      onPingClick={() => {
-                        void sendMCPRequest(
-                          {
-                            method: "ping" as const,
-                          },
-                          EmptyResultSchema,
-                        );
-                      }}
-                    />
-                    <SamplingTab
-                      pendingRequests={pendingSampleRequests}
-                      onApprove={handleApproveSampling}
-                      onReject={handleRejectSampling}
-                    />
-                    <RootsTab
-                      roots={roots}
-                      setRoots={setRoots}
-                      onRootsChange={handleRootsChange}
-                    />
-                    <AuthDebuggerWrapper />
-                  </>
-                )}
-              </div>
-            </Tabs>
-          ) : isAuthDebuggerVisible ? (
-            <Tabs
-              defaultValue={"auth"}
-              className="w-full p-4"
-              onValueChange={(value) => (window.location.hash = value)}
-            >
-              <AuthDebuggerWrapper />
-            </Tabs>
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full gap-4">
-              <p className="text-lg text-gray-500 dark:text-gray-400">
-                Connect to an MCP server to start inspecting
-              </p>
-              <div className="flex items-center gap-2">
-                <p className="text-sm text-muted-foreground">
-                  Need to configure authentication?
-                </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsAuthDebuggerVisible(true)}
-                >
-                  Open Auth Settings
-                </Button>
-              </div>
-            </div>
-          )}
+          <StatusPanel
+            connectionStatus={connectionStatus}
+            transportType={transportType}
+            command={command}
+            args={args}
+            sseUrl={sseUrl}
+            localUrl={localUrl}
+            publicUrl={publicUrl}
+            onStartTunnel={handleStartTunnel}
+            onStopTunnel={handleStopTunnel}
+            tunnelStatus={tunnelStatus}
+          />
         </div>
         <div
           className="relative border-t border-border"
@@ -931,10 +790,20 @@ const App = () => {
             <div className="w-8 h-1 rounded-full bg-border" />
           </div>
           <div className="h-full overflow-auto">
-            <HistoryAndNotifications
-              requestHistory={requestHistory}
-              serverNotifications={notifications}
-            />
+            {tunnelStatus === 'active' ? (
+              <NgrokPanel key={publicUrl} />
+            ) : (
+              <div className="flex items-center justify-center h-full">
+                <div className="text-center text-muted-foreground">
+                  <h3 className="text-lg font-semibold">Ngrok Inspector</h3>
+                  <p className="text-sm">
+                    {tunnelStatus === 'starting'
+                      ? "Tunnel is starting..."
+                      : "Start the tunnel to inspect traffic."}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -258,6 +258,13 @@ const App = () => {
     }
   };
 
+  const handleDisconnect = () => {
+    disconnectMcpServer();
+    if (tunnelStatus === "active") {
+      handleStopTunnel();
+    }
+  };
+
   return (
     <div className="flex h-screen bg-background">
       <div
@@ -288,7 +295,7 @@ const App = () => {
           headerName={headerName}
           setHeaderName={setHeaderName}
           onConnect={connectMcpServer}
-          onDisconnect={disconnectMcpServer}
+          onDisconnect={handleDisconnect}
           stdErrNotifications={stdErrNotifications}
           logLevel={logLevel}
           sendLogLevelRequest={sendLogLevelRequest}

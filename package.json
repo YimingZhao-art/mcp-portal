@@ -1,14 +1,19 @@
 {
-  "name": "@modelcontextprotocol/inspector",
-  "version": "0.14.3",
-  "description": "Model Context Protocol inspector",
+  "name": "@yimingzhao/mcp-portal",
+  "version": "0.1.4",
+  "description": "A web portal to connect to, inspect, and share local MCP servers.",
   "license": "MIT",
-  "author": "Anthropic, PBC (https://anthropic.com)",
-  "homepage": "https://modelcontextprotocol.io",
-  "bugs": "https://github.com/modelcontextprotocol/inspector/issues",
+  "author": "yimingzhao <zym0303@connect.hku.hk>",
+  "homepage": "https://github.com/YimingZhao-art/mcp-portal",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/YimingZhao-art/mcp-portal.git"
+  },
+  "bugs": "https://github.com/YimingZhao-art/mcp-portal/issues",
   "type": "module",
+  "main": "server/build/index.js",
   "bin": {
-    "mcp-inspector": "cli/build/cli.js"
+    "mcp-portal": "cli/build/cli.js"
   },
   "files": [
     "client/bin",
@@ -43,15 +48,18 @@
     "check-version": "node scripts/check-version-consistency.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/inspector-cli": "^0.14.3",
-    "@modelcontextprotocol/inspector-client": "^0.14.3",
-    "@modelcontextprotocol/inspector-server": "^0.14.3",
     "@modelcontextprotocol/sdk": "^1.12.1",
+    "@ngrok/ngrok": "^1.5.1",
+    "commander": "^13.1.0",
     "concurrently": "^9.0.1",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
     "open": "^10.1.0",
+    "serve-handler": "^6.1.6",
     "shell-quote": "^1.8.2",
     "spawn-rx": "^5.1.2",
     "ts-node": "^10.9.2",
+    "ws": "^8.18.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {

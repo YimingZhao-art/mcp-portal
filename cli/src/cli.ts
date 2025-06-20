@@ -208,7 +208,7 @@ function parseArgs(): Args {
   }
 
   program
-    .name("inspector-bin")
+    .name("mcp-portal")
     .allowExcessArguments()
     .allowUnknownOption()
     .option(

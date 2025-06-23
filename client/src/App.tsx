@@ -1,10 +1,5 @@
-import {
-  LoggingLevel,
-} from "@modelcontextprotocol/sdk/types.js";
-import {
-  useEffect,
-  useState,
-} from "react";
+import { LoggingLevel } from "@modelcontextprotocol/sdk/types.js";
+import { useEffect, useState } from "react";
 import { useConnection } from "./lib/hooks/useConnection";
 import {
   useDraggablePane,
@@ -59,7 +54,9 @@ const App = () => {
   // 隧道相关状态
   const [localUrl, setLocalUrl] = useState<string>("");
   const [publicUrl, setPublicUrl] = useState<string>("");
-  const [tunnelStatus, setTunnelStatus] = useState<"idle" | "starting" | "active" | "error">("idle");
+  const [tunnelStatus, setTunnelStatus] = useState<
+    "idle" | "starting" | "active" | "error"
+  >("idle");
 
   const { height: historyPaneHeight, handleDragStart } = useDraggablePane(300);
   const {
@@ -98,7 +95,10 @@ const App = () => {
       if (transportType === "stdio") {
         // stdio 模式使用 supergateway 的地址
         setLocalUrl("http://localhost:9001/sse");
-      } else if (transportType === "sse" || transportType === "streamable-http") {
+      } else if (
+        transportType === "sse" ||
+        transportType === "streamable-http"
+      ) {
         // sse/http 模式直接显示原始 URL
         setLocalUrl(sseUrl);
       }
@@ -184,40 +184,84 @@ const App = () => {
   const handleStartTunnel = async () => {
     try {
       setTunnelStatus("starting");
-      
-      // 根据传输类型确定要暴露的端口
+
+      // 根据传输类型确定要暴露的端口和URL
       let targetPort = 6277; // 默认 inspector proxy 端口
+      let targetUrl = undefined;
+
       if (transportType === "stdio") {
         targetPort = 9001; // supergateway 端口
+      } else if (
+        transportType === "sse" ||
+        transportType === "streamable-http"
+      ) {
+        // 对于 SSE/HTTP，如果是 localhost URL，使用直接映射
+        targetUrl = sseUrl;
+        // 从 URL 中提取端口
+        try {
+          const urlObj = new URL(sseUrl);
+          if (
+            urlObj.hostname === "localhost" ||
+            urlObj.hostname === "127.0.0.1"
+          ) {
+            targetPort =
+              parseInt(urlObj.port) ||
+              (urlObj.protocol === "https:" ? 443 : 80);
+          }
+        } catch (error) {
+          console.error("解析 SSE URL 失败:", error);
+        }
       }
-      
-      console.log(`启动隧道，暴露端口 ${targetPort}...`);
-      
+
+      console.log(
+        `启动隧道，传输类型: ${transportType}, 端口: ${targetPort}, URL: ${targetUrl}`,
+      );
+
       // 调用后端 API 启动隧道
-      const { token: proxyAuthToken, header: proxyAuthTokenHeader } = getMCPProxyAuthToken(config);
+      const { token: proxyAuthToken, header: proxyAuthTokenHeader } =
+        getMCPProxyAuthToken(config);
       const headers: HeadersInit = {};
       if (proxyAuthToken) {
         headers[proxyAuthTokenHeader] = `Bearer ${proxyAuthToken}`;
       }
-      
-      const response = await fetch(`${getMCPProxyAddress(config)}/tunnel/start`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...headers,
+
+      const requestBody: {
+        port: number;
+        transportType: string;
+        url?: string;
+      } = {
+        port: targetPort,
+        transportType: transportType,
+      };
+
+      // 为 SSE/HTTP 添加 URL 参数
+      if (transportType === "sse" || transportType === "streamable-http") {
+        requestBody.url = sseUrl;
+      }
+
+      const response = await fetch(
+        `${getMCPProxyAddress(config)}/tunnel/start`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...headers,
+          },
+          body: JSON.stringify(requestBody),
         },
-        body: JSON.stringify({ port: targetPort }),
-      });
-      
+      );
+
       if (!response.ok) {
         throw new Error(`启动隧道失败: ${response.statusText}`);
       }
-      
+
       const result = await response.json();
       setPublicUrl(result.publicUrl);
       setTunnelStatus("active");
       console.log(`隧道启动成功: ${result.publicUrl}`);
-      
+      if (result.directMapping) {
+        console.log(`使用直接URL映射，原始URL: ${result.originalUrl}`);
+      }
     } catch (error) {
       console.error("启动隧道失败:", error);
       setTunnelStatus("error");
@@ -227,31 +271,34 @@ const App = () => {
   const handleStopTunnel = async () => {
     try {
       setTunnelStatus("idle");
-      
+
       console.log("停止隧道...");
-      
+
       // 调用后端 API 停止隧道
-      const { token: proxyAuthToken, header: proxyAuthTokenHeader } = getMCPProxyAuthToken(config);
+      const { token: proxyAuthToken, header: proxyAuthTokenHeader } =
+        getMCPProxyAuthToken(config);
       const headers: HeadersInit = {};
       if (proxyAuthToken) {
         headers[proxyAuthTokenHeader] = `Bearer ${proxyAuthToken}`;
       }
-      
-      const response = await fetch(`${getMCPProxyAddress(config)}/tunnel/stop`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...headers,
+
+      const response = await fetch(
+        `${getMCPProxyAddress(config)}/tunnel/stop`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...headers,
+          },
         },
-      });
-      
+      );
+
       if (!response.ok) {
         throw new Error(`停止隧道失败: ${response.statusText}`);
       }
-      
+
       setPublicUrl("");
       console.log("隧道停止成功");
-      
     } catch (error) {
       console.error("停止隧道失败:", error);
       setTunnelStatus("error");
@@ -347,14 +394,14 @@ const App = () => {
             <div className="w-8 h-1 rounded-full bg-border" />
           </div>
           <div className="h-full overflow-auto">
-            {tunnelStatus === 'active' ? (
+            {tunnelStatus === "active" ? (
               <NgrokPanel key={publicUrl} />
             ) : (
               <div className="flex items-center justify-center h-full">
                 <div className="text-center text-muted-foreground">
                   <h3 className="text-lg font-semibold">Ngrok Inspector</h3>
                   <p className="text-sm">
-                    {tunnelStatus === 'starting'
+                    {tunnelStatus === "starting"
                       ? "Tunnel is starting..."
                       : "Start the tunnel to inspect traffic."}
                   </p>

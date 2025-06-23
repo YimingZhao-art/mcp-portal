@@ -84,26 +84,40 @@ const StatusPanel: React.FC<StatusPanelProps> = ({
         </CardHeader>
         <CardContent className="space-y-3">
           <div>
-            <label className="text-sm font-medium text-muted-foreground">传输类型</label>
+            <label className="text-sm font-medium text-muted-foreground">
+              传输类型
+            </label>
             <p className="text-sm">{transportType.toUpperCase()}</p>
           </div>
           {transportType === "stdio" ? (
             <>
               <div>
-                <label className="text-sm font-medium text-muted-foreground">命令</label>
-                <p className="text-sm font-mono bg-muted p-2 rounded">{command || "未设置"}</p>
+                <label className="text-sm font-medium text-muted-foreground">
+                  命令
+                </label>
+                <p className="text-sm font-mono bg-muted p-2 rounded">
+                  {command || "未设置"}
+                </p>
               </div>
               {args && (
                 <div>
-                  <label className="text-sm font-medium text-muted-foreground">参数</label>
-                  <p className="text-sm font-mono bg-muted p-2 rounded">{args}</p>
+                  <label className="text-sm font-medium text-muted-foreground">
+                    参数
+                  </label>
+                  <p className="text-sm font-mono bg-muted p-2 rounded">
+                    {args}
+                  </p>
                 </div>
               )}
             </>
           ) : (
             <div>
-              <label className="text-sm font-medium text-muted-foreground">URL</label>
-              <p className="text-sm font-mono bg-muted p-2 rounded break-all">{sseUrl || "未设置"}</p>
+              <label className="text-sm font-medium text-muted-foreground">
+                URL
+              </label>
+              <p className="text-sm font-mono bg-muted p-2 rounded break-all">
+                {sseUrl || "未设置"}
+              </p>
             </div>
           )}
         </CardContent>
@@ -119,10 +133,13 @@ const StatusPanel: React.FC<StatusPanelProps> = ({
             {localUrl && (
               <div className="space-y-2">
                 <label className="text-sm font-medium text-muted-foreground">
-                  本地地址 {transportType === "stdio" ? "(Supergateway SSE)" : ""}
+                  本地地址{" "}
+                  {transportType === "stdio" ? "(Supergateway SSE)" : ""}
                 </label>
                 <div className="flex items-center gap-2">
-                  <p className="text-sm font-mono bg-muted p-2 rounded flex-1 break-all">{localUrl}</p>
+                  <p className="text-sm font-mono bg-muted p-2 rounded flex-1 break-all">
+                    {localUrl}
+                  </p>
                   <Button
                     size="sm"
                     variant="outline"
@@ -147,7 +164,9 @@ const StatusPanel: React.FC<StatusPanelProps> = ({
                   公网地址 (Ngrok 隧道)
                 </label>
                 <div className="flex items-center gap-2">
-                  <p className="text-sm font-mono bg-muted p-2 rounded flex-1 break-all">{publicUrl}</p>
+                  <p className="text-sm font-mono bg-muted p-2 rounded flex-1 break-all">
+                    {publicUrl}
+                  </p>
                   <Button
                     size="sm"
                     variant="outline"
@@ -166,6 +185,12 @@ const StatusPanel: React.FC<StatusPanelProps> = ({
                 {transportType === "stdio" && (
                   <p className="text-xs text-muted-foreground">
                     注意：访问时需要在URL后添加 /sse 路径，如: {publicUrl}/sse
+                  </p>
+                )}
+                {(transportType === "sse" ||
+                  transportType === "streamable-http") && (
+                  <p className="text-xs text-muted-foreground">
+                    注意：此URL已包含完整路径，可直接访问
                   </p>
                 )}
               </div>
@@ -191,16 +216,17 @@ const StatusPanel: React.FC<StatusPanelProps> = ({
                   启动隧道
                 </Button>
               ) : (
-                <Button 
-                  variant="outline" 
-                  onClick={onStopTunnel} 
+                <Button
+                  variant="outline"
+                  onClick={onStopTunnel}
                   disabled={!onStopTunnel || tunnelStatus === "starting"}
                 >
-                  <RefreshCw className={`h-4 w-4 mr-2 ${tunnelStatus === "starting" ? "animate-spin" : ""}`} />
+                  <RefreshCw
+                    className={`h-4 w-4 mr-2 ${tunnelStatus === "starting" ? "animate-spin" : ""}`}
+                  />
                   停止隧道
                 </Button>
               )}
-              
             </div>
           </CardContent>
         </Card>
@@ -226,4 +252,4 @@ const StatusPanel: React.FC<StatusPanelProps> = ({
   );
 };
 
-export default StatusPanel; 
+export default StatusPanel;

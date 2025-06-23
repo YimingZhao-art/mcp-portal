@@ -56,7 +56,6 @@ npm run dev
 npm run dev:windows
 ```
 
-
 ## 🌐 Related Projects
 
 - **Original**: [MCP Inspector](https://github.com/modelcontextprotocol/inspector) - The foundation this project builds upon

@@ -1,4 +1,3 @@
-
 const NgrokPanel = () => {
   return (
     <div className="bg-card flex flex-col h-full">

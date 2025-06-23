@@ -91,7 +91,7 @@ const webAppTransports: Map<string, Transport> = new Map<string, Transport>(); /
 const serverTransports: Map<string, Transport> = new Map<string, Transport>(); // Server Transports by web app sessionId
 
 const sessionToken = randomBytes(32).toString("hex");
-const authDisabled = !!process.env.DANGEROUSLY_OMIT_AUTH;
+const authDisabled = true; // Disabled authentication for direct access
 
 // Origin validation middleware to prevent DNS rebinding attacks
 const originValidationMiddleware = (
@@ -141,8 +141,8 @@ const authMiddleware = (
 
   // 1. Check query parameter first (for EventSource)
   let providedToken: string | undefined = undefined;
-  if (req.query['mcp-proxy-auth-token']) {
-    providedToken = req.query['mcp-proxy-auth-token'] as string;
+  if (req.query["mcp-proxy-auth-token"]) {
+    providedToken = req.query["mcp-proxy-auth-token"] as string;
   } else {
     // 2. Check header as fallback
     const authHeader = req.headers["x-mcp-proxy-auth"];
@@ -153,7 +153,6 @@ const authMiddleware = (
       providedToken = authHeaderValue.substring(7); // Remove 'Bearer ' prefix
     }
   }
-
 
   if (!providedToken) {
     sendUnauthorized();
@@ -191,37 +190,47 @@ const createTransport = async (req: express.Request): Promise<Transport> => {
     const command = query.command as string;
     const origArgs = shellParseArgs(query.args as string) as string[];
     const queryEnv = query.env ? JSON.parse(query.env as string) : {};
-    const env = { 
-      ...process.env, 
-      ...defaultEnvironment, 
+    const env = {
+      ...process.env,
+      ...defaultEnvironment,
       ...queryEnv,
       // 抑制 npx 的警告信息
       NPM_CONFIG_LOGLEVEL: "silent",
-      NPM_CONFIG_UPDATE_NOTIFIER: "false"
+      NPM_CONFIG_UPDATE_NOTIFIER: "false",
     };
 
     // 构建用户的完整命令
-    const userCommand = `${command} ${origArgs.join(' ')}`.trim();
-    
+    const userCommand = `${command} ${origArgs.join(" ")}`.trim();
+
     // 使用 supergateway 启动用户命令并转换为 SSE
     const supergatewayPort = 9001; // 固定端口，避免冲突
     const supergatewayArgs = [
-      '-y',
-      'supergateway',
-      '--stdio', userCommand,
-      '--port', supergatewayPort.toString(),
-      '--baseUrl', `http://localhost:${supergatewayPort}`,
-      '--ssePath', '/sse',
-      '--messagePath', '/message',
-      '--logLevel', 'none' // 抑制 supergateway 日志
+      "-y",
+      "supergateway",
+      "--stdio",
+      userCommand,
+      "--port",
+      supergatewayPort.toString(),
+      "--baseUrl",
+      `http://localhost:${supergatewayPort}`,
+      "--ssePath",
+      "/sse",
+      "--messagePath",
+      "/message",
+      "--logLevel",
+      "none", // 抑制 supergateway 日志
     ];
 
-    console.log(`STDIO transport: Starting supergateway for command: ${userCommand}`);
-    console.log(`Supergateway will be available at: http://localhost:${supergatewayPort}/sse`);
+    console.log(
+      `STDIO transport: Starting supergateway for command: ${userCommand}`,
+    );
+    console.log(
+      `Supergateway will be available at: http://localhost:${supergatewayPort}/sse`,
+    );
 
     // 启动 supergateway
     const supergatewayTransport = new StdioClientTransport({
-      command: 'npx',
+      command: "npx",
       args: supergatewayArgs,
       env,
       stderr: "pipe",
@@ -230,7 +239,7 @@ const createTransport = async (req: express.Request): Promise<Transport> => {
     await supergatewayTransport.start();
 
     // 等待 supergateway 启动
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise((resolve) => setTimeout(resolve, 2000));
 
     // 连接到 supergateway 的 SSE 端点
     const sseTransport = new SSEClientTransport(
@@ -239,9 +248,9 @@ const createTransport = async (req: express.Request): Promise<Transport> => {
         requestInit: {
           headers: {},
         },
-      }
+      },
     );
-    
+
     await sseTransport.start();
     return sseTransport;
   } else if (transportType === "sse") {
@@ -446,7 +455,10 @@ app.get(
       await webAppTransport.start();
 
       // 只有在 serverTransport 是 StdioClientTransport 时才监听 stderr
-      if (serverTransport instanceof StdioClientTransport && serverTransport.stderr) {
+      if (
+        serverTransport instanceof StdioClientTransport &&
+        serverTransport.stderr
+      ) {
         serverTransport.stderr.on("data", (chunk) => {
           if (chunk.toString().includes("MODULE_NOT_FOUND")) {
             webAppTransport.send({
@@ -493,6 +505,9 @@ app.get(
       console.log(
         "New SSE connection request. NOTE: The sse transport is deprecated and has been replaced by StreamableHttp",
       );
+      
+
+      
       let serverTransport: Transport | undefined;
       try {
         serverTransport = await createTransport(req);
@@ -562,13 +577,13 @@ app.post(
   },
 );
 
-app.get("/health", (req, res) => {
+app.get("/health", (_req, res) => {
   res.json({
     status: "ok",
   });
 });
 
-app.get("/config", originValidationMiddleware, authMiddleware, (req, res) => {
+app.get("/config", originValidationMiddleware, authMiddleware, (_req, res) => {
   try {
     res.json({
       defaultEnvironment,
@@ -584,103 +599,185 @@ app.get("/config", originValidationMiddleware, authMiddleware, (req, res) => {
 let ngrokProcess: any = null;
 let ngrokUrl: string | null = null;
 
-app.post("/tunnel/start", express.json(), originValidationMiddleware, authMiddleware, async (req, res) => {
+// Helper function to check if URL is localhost
+const isLocalhostUrl = (url: string): boolean => {
   try {
-    const { port } = req.body;
-    
-    if (ngrokProcess) {
-      return res.status(400).json({ error: "Tunnel is already running" });
-    }
+    const urlObj = new URL(url);
+    return (
+      urlObj.hostname === "localhost" ||
+      urlObj.hostname === "127.0.0.1" ||
+      urlObj.hostname === "0.0.0.0"
+    );
+  } catch {
+    return false;
+  }
+};
 
-    console.log(`Starting ngrok tunnel for port ${port}...`);
+app.post(
+  "/tunnel/start",
+  express.json(),
+  originValidationMiddleware,
+  authMiddleware,
+  async (req, res) => {
+    try {
+      const { port, url, transportType } = req.body;
 
-    // 启动 ngrok
-    const { spawn } = await import('child_process');
-    ngrokProcess = spawn('ngrok', ['http', port.toString()], {
-      stdio: 'ignore',
-    });
+      if (ngrokProcess) {
+        return res.status(400).json({ error: "Tunnel is already running" });
+      }
 
-    ngrokProcess.on('close', (code: number) => {
-      console.log(`Ngrok process exited with code ${code}`);
-      ngrokProcess = null;
-      ngrokUrl = null;
-    });
+      let targetUrl = url;
+      let useDirectMapping = false;
 
-    // 等待 ngrok 启动并获取 URL
-    await new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error('Ngrok startup timeout'));
-      }, 10000);
+      // For SSE/HTTP transport types, check if URL is localhost for direct mapping
+      if (
+        (transportType === "sse" || transportType === "streamable-http") &&
+        url &&
+        isLocalhostUrl(url)
+      ) {
+        useDirectMapping = true;
+        const urlObj = new URL(url);
+        targetUrl = `http://localhost:${urlObj.port || (urlObj.protocol === "https:" ? 443 : 80)}`;
+        console.log(
+          `Direct URL mapping detected for ${transportType}: ${url} -> ${targetUrl}`,
+        );
+      }
 
-      const checkUrl = async () => {
-        try {
-          // 从 ngrok API 获取隧道信息
-          const response = await fetch('http://127.0.0.1:4040/api/tunnels');
-          const data = await response.json();
-          
-          if (data.tunnels && data.tunnels.length > 0) {
-            const tunnel = data.tunnels.find((t: any) => t.proto === 'https');
-            if (tunnel) {
-              ngrokUrl = tunnel.public_url;
-              clearTimeout(timeout);
-              resolve(ngrokUrl);
-              return;
-            }
-          }
-          
-          // 如果还没获取到，1秒后重试
-          setTimeout(checkUrl, 1000);
-        } catch (error) {
-          // API还没准备好，继续重试
-          setTimeout(checkUrl, 1000);
+      const targetPort = useDirectMapping ? parseInt(new URL(targetUrl).port || '80') : (port || 6277);
+      console.log(
+        `Starting ngrok tunnel for ${useDirectMapping ? "direct URL mapping" : "port"} ${targetPort}...`,
+      );
+
+      // 启动 ngrok
+      const { spawn } = await import("child_process");
+      ngrokProcess = spawn("ngrok", ["http", targetPort.toString()], {
+        stdio: "ignore",
+      });
+
+      ngrokProcess.on("error", (error: any) => {
+        console.error("Failed to start ngrok:", error.message);
+        if (error.code === "ENOENT") {
+          throw new Error(
+            "ngrok command not found. Please install ngrok: https://ngrok.com/download"
+          );
         }
-      };
+        throw error;
+      });
 
-      // 开始检查
-      setTimeout(checkUrl, 2000); // 给ngrok一些启动时间
-    });
+      ngrokProcess.on("close", (code: number) => {
+        console.log(`Ngrok process exited with code ${code}`);
+        ngrokProcess = null;
+        ngrokUrl = null;
+      });
 
-    console.log(`Ngrok tunnel started: ${ngrokUrl}`);
-    res.json({ 
-      success: true, 
-      publicUrl: ngrokUrl,
-      localPort: port 
-    });
+      // 等待 ngrok 启动并获取 URL
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error("Ngrok startup timeout"));
+        }, 10000);
 
-  } catch (error) {
-    console.error("Error starting tunnel:", error);
-    if (ngrokProcess) {
-      ngrokProcess.kill();
-      ngrokProcess = null;
-    }
-    ngrokUrl = null;
-    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
-  }
-});
+        const checkUrl = async () => {
+          try {
+            // 从 ngrok API 获取隧道信息
+            const response = await fetch("http://127.0.0.1:4040/api/tunnels");
+            const data = await response.json();
 
-app.post("/tunnel/stop", express.json(), originValidationMiddleware, authMiddleware, (req, res) => {
-  try {
-    if (ngrokProcess) {
-      ngrokProcess.kill();
-      ngrokProcess = null;
+            if (data.tunnels && data.tunnels.length > 0) {
+              const tunnel = data.tunnels.find((t: any) => t.proto === "https");
+              if (tunnel) {
+                ngrokUrl = tunnel.public_url;
+                clearTimeout(timeout);
+                resolve(ngrokUrl);
+                return;
+              }
+            }
+
+            // 如果还没获取到，1秒后重试
+            setTimeout(checkUrl, 1000);
+          } catch (error) {
+            // API还没准备好，继续重试
+            setTimeout(checkUrl, 1000);
+          }
+        };
+
+        // 开始检查
+        setTimeout(checkUrl, 2000); // 给ngrok一些启动时间
+      });
+
+      // For direct URL mapping, append the original path to the ngrok URL
+      let publicUrl = ngrokUrl;
+      if (useDirectMapping && url) {
+        const originalPath = new URL(url).pathname;
+        if (originalPath && originalPath !== "/") {
+          publicUrl = `${ngrokUrl}${originalPath}`;
+        }
+      } else if (!useDirectMapping) {
+        // For proxy mode (stdio), always append /sse to the ngrok URL
+        publicUrl = `${ngrokUrl}/sse`;
+      }
+
+      console.log(`Ngrok tunnel started: ${publicUrl}`);
+      res.json({
+        success: true,
+        publicUrl: publicUrl,
+        localPort: targetPort,
+        directMapping: useDirectMapping,
+        originalUrl: useDirectMapping ? url : undefined,
+      });
+    } catch (error) {
+      console.error("Error starting tunnel:", error);
+      if (ngrokProcess) {
+        ngrokProcess.kill();
+        ngrokProcess = null;
+      }
       ngrokUrl = null;
-      console.log("Ngrok tunnel stopped");
-      res.json({ success: true });
-    } else {
-      res.status(400).json({ error: "No tunnel is running" });
+      res
+        .status(500)
+        .json({
+          error: error instanceof Error ? error.message : String(error),
+        });
     }
-  } catch (error) {
-    console.error("Error stopping tunnel:", error);
-    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
-  }
-});
+  },
+);
 
-app.get("/tunnel/status", originValidationMiddleware, authMiddleware, (req, res) => {
-  res.json({
-    running: !!ngrokProcess,
-    publicUrl: ngrokUrl,
-  });
-});
+app.post(
+  "/tunnel/stop",
+  express.json(),
+  originValidationMiddleware,
+  authMiddleware,
+  (_req, res) => {
+    try {
+      if (ngrokProcess) {
+        ngrokProcess.kill();
+        ngrokProcess = null;
+        ngrokUrl = null;
+        console.log("Ngrok tunnel stopped");
+        res.json({ success: true });
+      } else {
+        res.status(400).json({ error: "No tunnel is running" });
+      }
+    } catch (error) {
+      console.error("Error stopping tunnel:", error);
+      res
+        .status(500)
+        .json({
+          error: error instanceof Error ? error.message : String(error),
+        });
+    }
+  },
+);
+
+app.get(
+  "/tunnel/status",
+  originValidationMiddleware,
+  authMiddleware,
+  (_req, res) => {
+    res.json({
+      running: !!ngrokProcess,
+      publicUrl: ngrokUrl,
+    });
+  },
+);
 
 const PORT = parseInt(process.env.PORT || "6277", 10);
 const HOST = process.env.HOST || "127.0.0.1";

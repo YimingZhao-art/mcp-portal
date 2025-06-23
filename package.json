@@ -1,6 +1,6 @@
 {
   "name": "@yimingzhao/mcp-portal",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "A web portal to connect to, inspect, and share local MCP servers.",
   "license": "MIT",
   "author": "yimingzhao <zym0303@connect.hku.hk>",

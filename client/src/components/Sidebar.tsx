@@ -14,6 +14,7 @@ import {
   RefreshCwOff,
   Copy,
   CheckCheck,
+  FileJson,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -100,6 +101,8 @@ const Sidebar = ({
   const [shownEnvVars, setShownEnvVars] = useState<Set<string>>(new Set());
   const [copiedServerEntry, setCopiedServerEntry] = useState(false);
   const [copiedServerFile, setCopiedServerFile] = useState(false);
+  const [showJsonPaste, setShowJsonPaste] = useState(false);
+  const [jsonPasteValue, setJsonPasteValue] = useState("");
   const { toast } = useToast();
 
   // Reusable error reporter for copy actions
@@ -113,6 +116,78 @@ const Sidebar = ({
     },
     [toast],
   );
+
+  // Parse JSON config and fill in the fields
+  const handleJsonParse = useCallback(() => {
+    try {
+      const parsed = JSON.parse(jsonPasteValue);
+      
+      // Check if it's an MCP config format
+      if (parsed.mcpServers && typeof parsed.mcpServers === 'object') {
+        const serverNames = Object.keys(parsed.mcpServers);
+        if (serverNames.length === 1) {
+          const serverConfig = parsed.mcpServers[serverNames[0]];
+          if (serverConfig.command) {
+            setCommand(serverConfig.command);
+            setArgs(serverConfig.args ? serverConfig.args.join(' ') : '');
+            if (serverConfig.env) {
+              setEnv(serverConfig.env);
+            }
+            setTransportType('stdio');
+            toast({
+              title: "Config loaded",
+              description: `Loaded configuration for server: ${serverNames[0]}`,
+            });
+            setShowJsonPaste(false);
+            setJsonPasteValue("");
+          }
+        } else if (serverNames.length > 1) {
+          toast({
+            title: "Multiple servers found",
+            description: `Found ${serverNames.length} servers: ${serverNames.join(', ')}. Using the first one: ${serverNames[0]}`,
+            variant: "destructive",
+          });
+          const serverConfig = parsed.mcpServers[serverNames[0]];
+          if (serverConfig.command) {
+            setCommand(serverConfig.command);
+            setArgs(serverConfig.args ? serverConfig.args.join(' ') : '');
+            if (serverConfig.env) {
+              setEnv(serverConfig.env);
+            }
+            setTransportType('stdio');
+            setShowJsonPaste(false);
+            setJsonPasteValue("");
+          }
+        }
+      } else if (parsed.command && typeof parsed.command === 'string') {
+        // Direct server config
+        setCommand(parsed.command);
+        setArgs(parsed.args ? parsed.args.join(' ') : '');
+        if (parsed.env) {
+          setEnv(parsed.env);
+        }
+        setTransportType('stdio');
+        toast({
+          title: "Config loaded",
+          description: "Loaded server configuration",
+        });
+        setShowJsonPaste(false);
+        setJsonPasteValue("");
+      } else {
+        toast({
+          title: "Invalid format",
+          description: "The JSON doesn't appear to be a valid MCP server configuration",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Parse error",
+        description: error instanceof Error ? error.message : "Failed to parse JSON",
+        variant: "destructive",
+      });
+    }
+  }, [jsonPasteValue, setCommand, setArgs, setEnv, setTransportType, toast]);
 
   // Shared utility function to generate server config
   const generateServerConfig = useCallback(() => {
@@ -252,9 +327,52 @@ const Sidebar = ({
           {transportType === "stdio" ? (
             <>
               <div className="space-y-2">
-                <label className="text-sm font-medium" htmlFor="command-input">
-                  Command
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium" htmlFor="command-input">
+                    Command
+                  </label>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowJsonPaste(!showJsonPaste)}
+                    className="h-7 px-2"
+                  >
+                    <FileJson className="h-4 w-4 mr-1" />
+                    Paste JSON
+                  </Button>
+                </div>
+                {showJsonPaste && (
+                  <div className="space-y-2 p-3 border rounded-md bg-muted/50">
+                    <label className="text-sm font-medium">
+                      Paste MCP Server Config JSON
+                    </label>
+                    <textarea
+                      className="w-full h-32 p-2 text-sm font-mono border rounded-md bg-background"
+                      placeholder='{"mcpServers": {"server-name": {"command": "...", "args": [...]}}} or {"command": "...", "args": [...]}'
+                      value={jsonPasteValue}
+                      onChange={(e) => setJsonPasteValue(e.target.value)}
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        onClick={handleJsonParse}
+                        disabled={!jsonPasteValue.trim()}
+                      >
+                        Parse & Fill
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setShowJsonPaste(false);
+                          setJsonPasteValue("");
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
                 <Input
                   id="command-input"
                   placeholder="Command"

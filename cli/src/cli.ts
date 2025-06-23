@@ -87,7 +87,7 @@ async function runWebClient(args: Args): Promise<void> {
       "node",
       [
         inspectorServerPath,
-        ...(args.command && args.command.trim() ? [`--env`, args.command] : []),
+        ...(args.command && args.command.trim() ? [`--env=${args.command}`] : []),
         ...(args.args && args.args.length > 0 ? [`--args=${args.args.join(" ")}`] : []),
       ],
       {

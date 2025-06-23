@@ -37,9 +37,10 @@ const defaultEnvironment = {
 const { values } = parseArgs({
   args: process.argv.slice(2),
   options: {
-    env: { type: "string", default: "" },
-    args: { type: "string", default: "" },
+    env: { type: "string" },
+    args: { type: "string" },
   },
+  allowPositionals: true,
 });
 
 // Function to get HTTP headers.
@@ -587,8 +588,8 @@ app.get("/config", originValidationMiddleware, authMiddleware, (_req, res) => {
   try {
     res.json({
       defaultEnvironment,
-      defaultCommand: values.env,
-      defaultArgs: values.args,
+      defaultCommand: values.env || "",
+      defaultArgs: values.args || "",
     });
   } catch (error) {
     console.error("Error in /config route:", error);

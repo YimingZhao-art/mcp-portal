@@ -11,7 +11,7 @@
   },
   "bugs": "https://github.com/YimingZhao-art/mcp-portal/issues",
   "type": "module",
-  "main": "server/build/index.js",
+  "main": "dist/electron/main.cjs",
   "bin": {
     "mcp-portal": "cli/build/cli.js"
   },
@@ -27,7 +27,14 @@
     "cli"
   ],
   "scripts": {
-    "build": "npm run build-server && npm run build-client && npm run build-cli",
+    "build": "npm run build-server && npm run build-client && npm run build-cli && npm run build-electron",
+    "build-electron": "tsc -p electron/tsconfig.json && mv dist/electron/main.js dist/electron/main.cjs && mv dist/electron/preload.js dist/electron/preload.cjs",
+    "electron": "npm run build && electron .",
+    "electron-dev": "node scripts/electron-dev.cjs",
+    "dist": "npm run build && electron-builder",
+    "dist-mac": "npm run build && electron-builder --mac",
+    "dist-win": "npm run build && electron-builder --win",
+    "dist-linux": "npm run build && electron-builder --linux",
     "build-server": "cd server && npm run build",
     "build-client": "cd client && npm run build",
     "build-cli": "cd cli && npm run build",
@@ -66,9 +73,38 @@
     "@types/jest": "^29.5.14",
     "@types/node": "^22.7.5",
     "@types/shell-quote": "^1.7.5",
+    "electron": "^37.2.0",
+    "electron-builder": "^26.0.12",
     "jest-fixed-jsdom": "^0.0.9",
     "prettier": "3.3.3",
     "rimraf": "^6.0.1",
+    "sharp": "^0.34.3",
     "typescript": "^5.4.2"
+  },
+  "build": {
+    "appId": "com.mcp.portal",
+    "productName": "MCP Portal",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "dist/**/*",
+      "client/dist/**/*",
+      "server/dist/**/*",
+      "assets/**/*",
+      "node_modules/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "icon": "assets/icon.icns"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "assets/icon.png"
+    }
   }
 }

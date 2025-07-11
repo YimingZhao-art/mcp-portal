@@ -9,6 +9,12 @@ export const getMCPProxyAddress = (config: InspectorConfig): string => {
   if (proxyFullAddress) {
     return proxyFullAddress;
   }
+  
+  // Handle file:// protocol for Electron
+  if (window.location.protocol === 'file:') {
+    return `http://127.0.0.1:${DEFAULT_MCP_PROXY_LISTEN_PORT}`;
+  }
+  
   return `${window.location.protocol}//${window.location.hostname}:${DEFAULT_MCP_PROXY_LISTEN_PORT}`;
 };
 

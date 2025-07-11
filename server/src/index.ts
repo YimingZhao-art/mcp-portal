@@ -102,6 +102,11 @@ const originValidationMiddleware = (
 ) => {
   const origin = req.headers.origin;
 
+  // Allow requests with no origin (file:// protocol doesn't send origin header)
+  if (!origin) {
+    return next();
+  }
+
   // Default origins based on CLIENT_PORT or use environment variable
   const clientPort = process.env.CLIENT_PORT || "6274";
   const defaultOrigins = [
@@ -111,7 +116,7 @@ const originValidationMiddleware = (
   const allowedOrigins =
     process.env.ALLOWED_ORIGINS?.split(",") || defaultOrigins;
 
-  if (origin && !allowedOrigins.includes(origin)) {
+  if (!allowedOrigins.includes(origin)) {
     console.error(`Invalid origin: ${origin}`);
     res.status(403).json({
       error: "Forbidden - invalid origin",
@@ -204,7 +209,8 @@ const createTransport = async (req: express.Request): Promise<Transport> => {
     const userCommand = `${command} ${origArgs.join(" ")}`.trim();
 
     // 使用 supergateway 启动用户命令并转换为 SSE
-    const supergatewayPort = 9001; // 固定端口，避免冲突
+    // 默认使用 8000 端口，与 supergateway 的默认设置一致
+    const supergatewayPort = parseInt(process.env.SUPERGATEWAY_PORT || "8000");
     const supergatewayArgs = [
       "-y",
       "supergateway",
@@ -237,10 +243,52 @@ const createTransport = async (req: express.Request): Promise<Transport> => {
       stderr: "pipe",
     });
 
-    await supergatewayTransport.start();
+    try {
+      await supergatewayTransport.start();
+    } catch (error) {
+      console.error(`Failed to start supergateway:`, error);
+      throw error;
+    }
 
     // 等待 supergateway 启动
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    console.log(`Waiting for supergateway to start on port ${supergatewayPort}...`);
+    
+    // 给 supergateway 更多时间启动
+    // 第一次运行时，npx 需要下载 supergateway 和 MCP 服务器
+    let connected = false;
+    let attempts = 0;
+    const maxAttempts = 30; // 最多等待30秒
+    
+    while (!connected && attempts < maxAttempts) {
+      await new Promise((resolve) => setTimeout(resolve, 1000)); // 每秒检查一次
+      attempts++;
+      
+      try {
+        // 尝试连接到 SSE 端点
+        const testResponse = await fetch(`http://localhost:${supergatewayPort}/sse`, {
+          method: 'GET',
+          headers: {
+            'Accept': 'text/event-stream'
+          },
+          signal: AbortSignal.timeout(500) // 500ms 超时
+        });
+        
+        // 如果返回任何响应（即使是错误），说明服务器在监听
+        connected = true;
+        console.log(`Supergateway is ready on port ${supergatewayPort} (attempt ${attempts})`);
+      } catch (error) {
+        // 继续等待
+        if (attempts % 5 === 0) {
+          console.log(`Still waiting for supergateway... (${attempts}/${maxAttempts})`);
+        }
+      }
+    }
+    
+    if (!connected) {
+      throw new Error(`Supergateway failed to start on port ${supergatewayPort} after ${maxAttempts} seconds`);
+    }
+    
+    console.log(`Connecting to supergateway at http://localhost:${supergatewayPort}/sse`);
 
     // 连接到 supergateway 的 SSE 端点
     const sseTransport = new SSEClientTransport(
@@ -318,7 +366,6 @@ app.get(
 
 app.post(
   "/mcp",
-  express.json(),
   originValidationMiddleware,
   authMiddleware,
   async (req, res) => {
@@ -364,7 +411,6 @@ app.post(
         await (webAppTransport as StreamableHTTPServerTransport).handleRequest(
           req,
           res,
-          req.body,
         );
       } catch (error) {
         console.error("Error in /mcp POST route:", error);

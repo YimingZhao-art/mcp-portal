@@ -1,19 +1,22 @@
-const { app, BrowserWindow, shell, Menu, Tray, nativeImage } = require('electron');
+const { app, BrowserWindow, shell, Menu, Tray, nativeImage, ipcMain } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const WindowStateManager = require('./windowStateManager.cjs');
+const DependencyManager = require('./dependencyManager.cjs');
 
 let mainWindow = null;
 let serverProcess = null;
 let tray = null;
 
-const SERVER_PORT = 6277;
-const CLIENT_PORT = 6274;
+const { PORTS } = require('../shared/config.cjs');
+const SERVER_PORT = PORTS.PROXY_SERVER;
+const CLIENT_PORT = PORTS.CLIENT_DEV;
 const isDev = process.env.NODE_ENV === 'development';
 
 const windowStateManager = new WindowStateManager();
+const dependencyManager = new DependencyManager();
 
 function createWindow() {
   const windowState = windowStateManager.load();
@@ -249,11 +252,67 @@ function createMenu() {
   Menu.setApplicationMenu(menu);
 }
 
-app.whenReady().then(() => {
+// IPC handlers for dependency management
+ipcMain.handle('check-dependencies', async () => {
+  try {
+    return await dependencyManager.checkDependencies();
+  } catch (error) {
+    console.error('Error checking dependencies:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('install-dependencies', async (event) => {
+  try {
+    await dependencyManager.installDependencies((progress) => {
+      event.sender.send('install-progress', progress);
+    });
+    return { success: true };
+  } catch (error) {
+    console.error('Error installing dependencies:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('configure-ngrok', async (event, authtoken) => {
+  try {
+    await dependencyManager.configureNgrok(authtoken);
+    return { success: true };
+  } catch (error) {
+    console.error('Error configuring ngrok:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('get-ngrok-config', async () => {
+  try {
+    return await dependencyManager.getNgrokConfig();
+  } catch (error) {
+    console.error('Error getting ngrok config:', error);
+    throw error;
+  }
+});
+
+app.whenReady().then(async () => {
   startServer();
   createWindow();
   createMenu();
   createTray();
+
+  // Check dependencies on startup
+  try {
+    const status = await dependencyManager.checkDependencies();
+    console.log('Dependency status:', status);
+    
+    // Send status to renderer when window is ready
+    if (mainWindow) {
+      mainWindow.webContents.once('did-finish-load', () => {
+        mainWindow.webContents.send('dependency-status', status);
+      });
+    }
+  } catch (error) {
+    console.error('Error checking dependencies on startup:', error);
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

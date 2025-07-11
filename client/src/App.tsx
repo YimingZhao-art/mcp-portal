@@ -23,6 +23,7 @@ import {
   initializeInspectorConfig,
   saveInspectorConfig,
 } from "./utils/configUtils";
+import { PORTS, getSupergatewayUrl } from "./config/ports";
 
 const CONFIG_LOCAL_STORAGE_KEY = "inspectorConfig_v1";
 
@@ -94,7 +95,7 @@ const App = () => {
     if (connectionStatus === "connected") {
       if (transportType === "stdio") {
         // stdio 模式使用 supergateway 的地址
-        setLocalUrl("http://localhost:8000/sse");
+        setLocalUrl(getSupergatewayUrl());
       } else if (
         transportType === "sse" ||
         transportType === "streamable-http"
@@ -190,7 +191,7 @@ const App = () => {
       let targetUrl = undefined;
 
       if (transportType === "stdio") {
-        targetPort = 8000; // supergateway 端口
+        targetPort = PORTS.SUPERGATEWAY; // supergateway 端口
       } else if (
         transportType === "sse" ||
         transportType === "streamable-http"

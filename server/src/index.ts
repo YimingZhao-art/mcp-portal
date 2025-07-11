@@ -21,6 +21,7 @@ import { findActualExecutable } from "spawn-rx";
 import mcpProxy from "./mcpProxy.js";
 import { randomUUID, randomBytes, timingSafeEqual } from "node:crypto";
 import bodyParser from "body-parser";
+import { PORTS, getSupergatewayPort } from "../../shared/config.js";
 
 const SSE_HEADERS_PASSTHROUGH = ["authorization"];
 const STREAMABLE_HTTP_HEADERS_PASSTHROUGH = [
@@ -209,8 +210,8 @@ const createTransport = async (req: express.Request): Promise<Transport> => {
     const userCommand = `${command} ${origArgs.join(" ")}`.trim();
 
     // 使用 supergateway 启动用户命令并转换为 SSE
-    // 默认使用 8000 端口，与 supergateway 的默认设置一致
-    const supergatewayPort = parseInt(process.env.SUPERGATEWAY_PORT || "8000");
+    // 从配置中获取端口，支持环境变量覆盖
+    const supergatewayPort = getSupergatewayPort();
     const supergatewayArgs = [
       "-y",
       "supergateway",
@@ -633,7 +634,7 @@ app.get("/health", (_req, res) => {
 app.get("/config", originValidationMiddleware, authMiddleware, (_req, res) => {
   try {
     res.json({
-      defaultEnvironment,
+      defaultEnvironment: {}, // Return empty object instead of system env vars
       defaultCommand: values.env || "",
       defaultArgs: values.args || "",
     });
@@ -826,7 +827,7 @@ app.get(
   },
 );
 
-const PORT = parseInt(process.env.PORT || "6277", 10);
+const PORT = parseInt(process.env.PORT || PORTS.PROXY_SERVER.toString(), 10);
 const HOST = process.env.HOST || "127.0.0.1";
 
 const server = app.listen(PORT, HOST);

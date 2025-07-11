@@ -28,7 +28,7 @@
   ],
   "scripts": {
     "build": "npm run build-server && npm run build-client && npm run build-cli && npm run build-electron",
-    "build-electron": "tsc -p electron/tsconfig.json && mv dist/electron/main.js dist/electron/main.cjs && mv dist/electron/preload.js dist/electron/preload.cjs",
+    "build-electron": "tsc -p electron/tsconfig.json && mv dist/electron/main.js dist/electron/main.cjs && mv dist/electron/preload.js dist/electron/preload.cjs && cp -r shared dist/",
     "electron": "npm run build && electron .",
     "electron-dev": "node scripts/electron-dev.cjs",
     "dist": "npm run build && electron-builder",
@@ -92,6 +92,7 @@
       "client/dist/**/*",
       "server/dist/**/*",
       "assets/**/*",
+      "shared/**/*",
       "node_modules/**/*"
     ],
     "mac": {

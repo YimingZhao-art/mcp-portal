@@ -14,7 +14,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && cp -r ../shared ./dist/",
     "start": "node dist/index.js",
     "dev": "tsx watch --clear-screen=false src/index.ts",
     "dev:windows": "tsx watch --clear-screen=false src/index.ts < NUL"

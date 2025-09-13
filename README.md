@@ -2,14 +2,31 @@
 
 A **supergateway** that bridges local STDIO MCP servers to Server-Sent Events (SSE) and exposes them to public networks. Built as a fork of the [Model Context Protocol Inspector](https://github.com/modelcontextprotocol/inspector), MCP Portal transforms local-only MCP servers into network-accessible services.
 
+Available as both a **desktop application** and web interface, MCP Portal provides a user-friendly way to inspect, test, and share your MCP servers.
+
 ## 🚀 Quick Start
+
+### Desktop App (Recommended)
 
 ```bash
 # Clone the repository
 git clone https://github.com/YimingZhao-art/mcp-portal.git
 cd mcp-portal
 
-# Install dependencies and start
+# Install dependencies
+npm install --ignore-scripts
+
+# Start desktop app in development mode
+npm run electron-dev
+
+# Or build and run desktop app
+npm run electron
+```
+
+### Web Version
+
+```bash
+# Install dependencies and start web version
 npm install --ignore-scripts
 npm run dev
 ```
@@ -49,12 +66,29 @@ cd mcp-portal
 # Install dependencies
 npm install
 
-# Start development mode
+# Start web development mode
 npm run dev
 
 # On Windows
 npm run dev:windows
+
+# Start desktop app development mode
+npm run electron-dev
 ```
+
+### Building Desktop App
+
+```bash
+# Build for all platforms
+npm run dist
+
+# Build for specific platforms
+npm run dist-mac    # macOS
+npm run dist-win    # Windows  
+npm run dist-linux  # Linux
+```
+
+The built applications will be available in the `dist-electron/` directory.
 
 ## 🌐 Related Projects
 

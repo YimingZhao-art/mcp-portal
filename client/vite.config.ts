@@ -13,6 +13,7 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  base: "./", // 使用相对路径，这样在file://协议下也能正常工作
   build: {
     minify: false,
     rollupOptions: {

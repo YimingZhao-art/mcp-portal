@@ -23,6 +23,7 @@ import {
   initializeInspectorConfig,
   saveInspectorConfig,
 } from "./utils/configUtils";
+import { PORTS, getSupergatewayUrl } from "./config/ports";
 
 const CONFIG_LOCAL_STORAGE_KEY = "inspectorConfig_v1";
 
@@ -94,7 +95,7 @@ const App = () => {
     if (connectionStatus === "connected") {
       if (transportType === "stdio") {
         // stdio 模式使用 supergateway 的地址
-        setLocalUrl("http://localhost:9001/sse");
+        setLocalUrl(getSupergatewayUrl());
       } else if (
         transportType === "sse" ||
         transportType === "streamable-http"
@@ -190,7 +191,7 @@ const App = () => {
       let targetUrl = undefined;
 
       if (transportType === "stdio") {
-        targetPort = 9001; // supergateway 端口
+        targetPort = PORTS.SUPERGATEWAY; // supergateway 端口
       } else if (
         transportType === "sse" ||
         transportType === "streamable-http"
@@ -367,8 +368,9 @@ const App = () => {
         />
       </div>
       <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="flex-1 overflow-auto">
-          <StatusPanel
+        <div className="flex-1 overflow-auto bg-gray-50 dark:bg-gray-900">
+          <div className="max-w-7xl mx-auto">
+            <StatusPanel
             connectionStatus={connectionStatus}
             transportType={transportType}
             command={command}
@@ -380,6 +382,7 @@ const App = () => {
             onStopTunnel={handleStopTunnel}
             tunnelStatus={tunnelStatus}
           />
+          </div>
         </div>
         <div
           className="relative border-t border-border"

@@ -4,8 +4,21 @@
 node_modules/
 *-workspace/
 server/build
+server/dist
 client/dist
 client/tsconfig.app.tsbuildinfo
 client/tsconfig.node.tsbuildinfo
 cli/build
 test-output
+
+# Electron
+dist/
+dist-electron/
+*.log
+
+# Test files
+test-electron.html
+
+# User data
+.mcp-portal/
+window-state.json

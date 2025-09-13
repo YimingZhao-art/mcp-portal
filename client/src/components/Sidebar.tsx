@@ -4,7 +4,6 @@ import {
   ChevronDown,
   ChevronRight,
   CircleHelp,
-  Bug,
   Github,
   Eye,
   EyeOff,
@@ -16,6 +15,8 @@ import {
   CheckCheck,
   FileJson,
 } from "lucide-react";
+import { DependencySetup } from "./DependencySetup";
+import { HelpDialog } from "./HelpDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -103,6 +104,7 @@ const Sidebar = ({
   const [copiedServerFile, setCopiedServerFile] = useState(false);
   const [showJsonPaste, setShowJsonPaste] = useState(false);
   const [jsonPasteValue, setJsonPasteValue] = useState("");
+  const [showHelpDialog, setShowHelpDialog] = useState(false);
   const { toast } = useToast();
 
   // Reusable error reporter for copy actions
@@ -120,63 +122,108 @@ const Sidebar = ({
   // Parse JSON config and fill in the fields
   const handleJsonParse = useCallback(() => {
     try {
-      const parsed = JSON.parse(jsonPasteValue);
+      const parsed = JSON.parse(jsonPasteValue.trim());
       
-      // Check if it's an MCP config format
+      // Helper function to load server config
+      const loadServerConfig = (serverConfig: any, _serverName?: string) => {
+        if (!serverConfig) return false;
+        
+        // Handle different server config formats
+        if (serverConfig.command) {
+          // STDIO format
+          setCommand(serverConfig.command);
+          setArgs(serverConfig.args ? serverConfig.args.join(' ') : '');
+          if (serverConfig.env) {
+            setEnv({ ...env, ...serverConfig.env });
+          }
+          setTransportType('stdio');
+          return true;
+        } else if (serverConfig.url && serverConfig.type === 'sse') {
+          // SSE format
+          setSseUrl(serverConfig.url);
+          setTransportType('sse');
+          return true;
+        } else if (serverConfig.url && serverConfig.type === 'streamable-http') {
+          // Streamable HTTP format
+          setSseUrl(serverConfig.url);
+          setTransportType('streamable-http');
+          return true;
+        }
+        return false;
+      };
+      
+      // Check if it's a full server file format with mcpServers wrapper
       if (parsed.mcpServers && typeof parsed.mcpServers === 'object') {
         const serverNames = Object.keys(parsed.mcpServers);
-        if (serverNames.length === 1) {
-          const serverConfig = parsed.mcpServers[serverNames[0]];
-          if (serverConfig.command) {
-            setCommand(serverConfig.command);
-            setArgs(serverConfig.args ? serverConfig.args.join(' ') : '');
-            if (serverConfig.env) {
-              setEnv(serverConfig.env);
-            }
-            setTransportType('stdio');
-            toast({
-              title: "Config loaded",
-              description: `Loaded configuration for server: ${serverNames[0]}`,
-            });
-            setShowJsonPaste(false);
-            setJsonPasteValue("");
-          }
-        } else if (serverNames.length > 1) {
+        if (serverNames.length === 0) {
           toast({
-            title: "Multiple servers found",
-            description: `Found ${serverNames.length} servers: ${serverNames.join(', ')}. Using the first one: ${serverNames[0]}`,
+            title: "No servers found",
+            description: "The mcpServers object is empty",
             variant: "destructive",
           });
-          const serverConfig = parsed.mcpServers[serverNames[0]];
-          if (serverConfig.command) {
-            setCommand(serverConfig.command);
-            setArgs(serverConfig.args ? serverConfig.args.join(' ') : '');
-            if (serverConfig.env) {
-              setEnv(serverConfig.env);
-            }
-            setTransportType('stdio');
-            setShowJsonPaste(false);
-            setJsonPasteValue("");
-          }
+          return;
         }
-      } else if (parsed.command && typeof parsed.command === 'string') {
-        // Direct server config
-        setCommand(parsed.command);
-        setArgs(parsed.args ? parsed.args.join(' ') : '');
-        if (parsed.env) {
-          setEnv(parsed.env);
+        
+        const serverName = serverNames[0];
+        const serverConfig = parsed.mcpServers[serverName];
+        
+        if (loadServerConfig(serverConfig, serverName)) {
+          toast({
+            title: "Server file loaded",
+            description: serverNames.length > 1 
+              ? `Loaded "${serverName}" (${serverNames.length} servers found, using first)`
+              : `Loaded server configuration: ${serverName}`,
+          });
+          setShowJsonPaste(false);
+          setJsonPasteValue("");
+        } else {
+          toast({
+            title: "Invalid server configuration",
+            description: `Server "${serverName}" has invalid configuration`,
+            variant: "destructive",
+          });
         }
-        setTransportType('stdio');
-        toast({
-          title: "Config loaded",
-          description: "Loaded server configuration",
-        });
-        setShowJsonPaste(false);
-        setJsonPasteValue("");
-      } else {
+      } 
+      // Check if it's a direct server entry (without mcpServers wrapper)
+      else if (typeof parsed === 'object' && (parsed.command || parsed.url || parsed.type)) {
+        if (loadServerConfig(parsed)) {
+          toast({
+            title: "Server entry loaded",
+            description: "Loaded server configuration",
+          });
+          setShowJsonPaste(false);
+          setJsonPasteValue("");
+        } else {
+          toast({
+            title: "Invalid configuration",
+            description: "Unable to parse server configuration",
+            variant: "destructive",
+          });
+        }
+      } 
+      // Try to detect if user tried to paste just the server name and config
+      else if (Object.keys(parsed).length === 1) {
+        const serverName = Object.keys(parsed)[0];
+        const serverConfig = parsed[serverName];
+        if (typeof serverConfig === 'object' && loadServerConfig(serverConfig, serverName)) {
+          toast({
+            title: "Server entry loaded",
+            description: `Loaded server configuration: ${serverName}`,
+          });
+          setShowJsonPaste(false);
+          setJsonPasteValue("");
+        } else {
+          toast({
+            title: "Invalid format",
+            description: "The JSON doesn't appear to be a valid MCP server configuration",
+            variant: "destructive",
+          });
+        }
+      }
+      else {
         toast({
           title: "Invalid format",
-          description: "The JSON doesn't appear to be a valid MCP server configuration",
+          description: "Please paste either a complete server file (with mcpServers) or a server entry",
           variant: "destructive",
         });
       }
@@ -187,7 +234,7 @@ const Sidebar = ({
         variant: "destructive",
       });
     }
-  }, [jsonPasteValue, setCommand, setArgs, setEnv, setTransportType, toast]);
+  }, [jsonPasteValue, setCommand, setArgs, setEnv, setSseUrl, setTransportType, toast]);
 
   // Shared utility function to generate server config
   const generateServerConfig = useCallback(() => {
@@ -300,6 +347,8 @@ const Sidebar = ({
 
       <div className="p-4 flex-1 overflow-auto">
         <div className="space-y-4">
+          {/* Dependency Setup - Only show in Electron */}
+          {window.electronAPI && <DependencySetup />}
           <div className="space-y-2">
             <label
               className="text-sm font-medium"
@@ -343,12 +392,19 @@ const Sidebar = ({
                 </div>
                 {showJsonPaste && (
                   <div className="space-y-2 p-3 border rounded-md bg-muted/50">
-                    <label className="text-sm font-medium">
-                      Paste MCP Server Config JSON
-                    </label>
+                    <div>
+                      <label className="text-sm font-medium">
+                        Paste MCP Configuration
+                      </label>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Supports both Server File and Server Entry formats
+                      </p>
+                    </div>
                     <textarea
                       className="w-full h-32 p-2 text-sm font-mono border rounded-md bg-background"
-                      placeholder='{"mcpServers": {"server-name": {"command": "...", "args": [...]}}} or {"command": "...", "args": [...]}'
+                      placeholder='Server File: {"mcpServers": {"name": {...}}}
+Server Entry: {"command": "npx", "args": [...]}
+Named Entry: {"name": {"command": "npx", ...}}'
                       value={jsonPasteValue}
                       onChange={(e) => setJsonPasteValue(e.target.value)}
                     />
@@ -358,7 +414,7 @@ const Sidebar = ({
                         onClick={handleJsonParse}
                         disabled={!jsonPasteValue.trim()}
                       >
-                        Parse & Fill
+                        Parse & Load
                       </Button>
                       <Button
                         size="sm"
@@ -879,31 +935,20 @@ const Sidebar = ({
           </Select>
 
           <div className="flex items-center space-x-2">
-            <Button variant="ghost" title="Inspector Documentation" asChild>
-              <a
-                href="https://modelcontextprotocol.io/docs/tools/inspector"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <CircleHelp className="w-4 h-4 text-foreground" />
-              </a>
-            </Button>
-            <Button variant="ghost" title="Debugging Guide" asChild>
-              <a
-                href="https://modelcontextprotocol.io/docs/tools/debugging"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Bug className="w-4 h-4 text-foreground" />
-              </a>
+            <Button 
+              variant="ghost" 
+              title="Usage Instructions"
+              onClick={() => setShowHelpDialog(true)}
+            >
+              <CircleHelp className="w-4 h-4 text-foreground" />
             </Button>
             <Button
               variant="ghost"
-              title="Report bugs or contribute on GitHub"
+              title="MCP Portal on GitHub"
               asChild
             >
               <a
-                href="https://github.com/modelcontextprotocol/inspector"
+                href="https://github.com/YimingZhao-art/mcp-portal"
                 target="_blank"
                 rel="noopener noreferrer"
               >
@@ -913,6 +958,7 @@ const Sidebar = ({
           </div>
         </div>
       </div>
+      <HelpDialog open={showHelpDialog} onOpenChange={setShowHelpDialog} />
     </div>
   );
 };
